@@ -5,5 +5,7 @@ set(CMAKE_C_STANDARD 23)
 
 add_executable(uai main.c
         cpu.c
-        screen.c
-        screen.h)
+        processing.c
+        processing.h)
+
+target_link_libraries(uai "-lraylib -lgdi32 -lwinmm")

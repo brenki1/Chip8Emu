@@ -1,10 +1,9 @@
 #include "cpu.h"
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include "screen.h"
+
 
 #define null NULL
 #define PC_START 0x200
@@ -12,12 +11,12 @@
 
 
 unsigned char ram[4096];
-bool video[64*32]; // 1: Branco; 0: Preto
+//bool video[32][64]; // 1: Branco; 0: Preto
 uint16_t PC;
 uint16_t indexRegister;
 uint16_t stack[32];
 uint16_t stackPointer;
-uint8_t delayTimer;
+
 uint8_t soundTimer;
 uint8_t registers[16];
 bool keys[16];
@@ -46,12 +45,14 @@ const static uint8_t fonte[80] = {
 
 void InitMemory() {
     memset(ram, 0, 4096);
-    memset(video, 0, 64*32);
+//    for(int i = 0; i < 32; ++i) {
+//        for(int j = 0; j < 64; ++j) video[i][j] = 0;
+//    }
     PC = PC_START; //começa fora da fonte
     indexRegister = 0;
     memset(stack, 0, 32);
     stackPointer = 0;
-    delayTimer = 0;
+    SetDelay(60);
     soundTimer = 0;
     memset(registers, 0, 16);
     memset(keys, 0, 16);
@@ -96,7 +97,7 @@ void Log(char *msg) {
 }
 
 
-void Cycle() {
+void Cycle(pixel video[32][64]) {
     // Fetch
     //uint16_t i1, i2;
 //    PC += 2;
@@ -109,11 +110,11 @@ void Cycle() {
     uint16_t inst = (ram[PC] << 8) | ram[PC+1]; // Junta as duas movendo a primeira parte pra fente e fazendo um OR
     PC += 2;
     uint16_t nib1 = 0xF000 & inst; // extrai o primeiro nibble -> identifica instrução
-    uint16_t X = 0x0F00 & inst; // segundo nibble -> indica algum registrador Vx
-    uint8_t Y = 0x00F0 & inst; // terceiro nibble -> indica algum registrador Vy
+    uint8_t X = (0x0F00 & inst) >> 8; // segundo nibble -> indica algum registrador Vx
+    uint8_t Y = (0x00F0 & inst) >> 4; // terceiro nibble -> indica algum registrador Vy
     uint8_t N = 0x000F & inst; // quarto nibble -> numero de 4 bits
-    uint8_t NN = 0x00FF & inst; // 2° byte -> numero imediato de 8 bits
-    uint16_t NNN = 0x0FFF & inst; // endereço de memória imediato de 12 bits
+    uint8_t NN = (0x00FF & inst); // 2° byte -> numero imediato de 8 bits
+    uint16_t NNN = (0x0FFF & inst); // endereço de memória imediato de 12 bits
 
 
 //    printf("Ist separada: %02X%02X\n", i1, i2);
@@ -131,7 +132,9 @@ void Cycle() {
             if(Y == 0xE0) { // opc: 00E0
                 // clc
                 Log("clc");
-                memset(video, 0, 64*32);
+                for(int i = 0; i < 32; ++i) {
+                    for(int j = 0; j < 64; ++j) video[i][j].active = 0;
+                }
                 break;
             }
 
@@ -304,6 +307,21 @@ void Cycle() {
         case 0xD000: { // opc: DXYN
             // desenho
             Log("draw");
+            int xCord = registers[X] % 64;
+            int yCord = registers[Y] % 32;
+            registers[0xF] = 0;
+
+            for(int i = 0; i < N; ++i) {
+                int pix = ram[indexRegister + i];
+                for(int j = 0; j < 8; ++j) {
+                    if((pix & (0x80 >> j)) != 0) {
+                        if(video[yCord + i][xCord + j].active == 1) {
+                            registers[0xF] = 1;
+                        }
+                        video[yCord + i][xCord + j].active ^= 1;
+                    }
+                }
+            }
             break;
         }
 
@@ -327,13 +345,14 @@ void Cycle() {
             switch (NN) {
                 case 0x07: { // opc FX07
                     Log("Vx = delay timer");
-                    registers[X] = delayTimer;
+                    registers[X] = GetDelay();
                     break;
                 }
 
                 case 0x15: { // opc FX15
                     Log("delay timer = Vx");
-                    delayTimer = registers[X];
+                    //delayTimer = registers[X];
+                    SetDelay(registers[X]);
                     break;
                 }
 
@@ -406,12 +425,5 @@ void Cycle() {
             printf("Invalid opcode!\n");
         }
 
-    }
-}
-
-void CPULoop() {
-    while(1) {
-        getchar();
-        Cycle();
     }
 }
