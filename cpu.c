@@ -20,6 +20,7 @@ uint16_t stackPointer;
 uint8_t soundTimer;
 uint8_t registers[16];
 bool keys[16];
+int keyPressed;
 
 
 const static uint8_t fonte[80] = {
@@ -42,12 +43,21 @@ const static uint8_t fonte[80] = {
 };
 
 
+void ReadKey(int key) {
+    keyPressed = key;
+    keys[key] = true;
+}
+
+
+void ClearKeys() {
+    keyPressed = -1;
+    memset(keys, 0, 16);
+}
+
 
 void InitMemory() {
     memset(ram, 0, 4096);
-//    for(int i = 0; i < 32; ++i) {
-//        for(int j = 0; j < 64; ++j) video[i][j] = 0;
-//    }
+
     PC = PC_START; //começa fora da fonte
     indexRegister = 0;
     memset(stack, 0, 32);
@@ -56,10 +66,14 @@ void InitMemory() {
     soundTimer = 0;
     memset(registers, 0, 16);
     memset(keys, 0, 16);
+    keyPressed = -1;
 
     for(int i = 0; i < 80; ++i) {
         ram[i] = fonte[i];
     }
+
+    //TODO: Remover!
+    //ram[0x1FF] = 1; // teste automatico
 }
 
 void LoadRom(char *filePath) {
@@ -129,22 +143,25 @@ void Cycle(pixel video[32][64]) {
 
     switch (nib1) {
         case 0x00: {
-            if(Y == 0xE0) { // opc: 00E0
-                // clc
-                Log("clc");
-                for(int i = 0; i < 32; ++i) {
-                    for(int j = 0; j < 64; ++j) video[i][j].active = 0;
-                }
-                break;
-            }
 
-            if(Y == 0xE0 && N == 0xE0) { //opc 00EE
+            if(Y == 0xE && N == 0xE) { //opc 00EE
                 Log("subroutine return");
-                PC = stack[stackPointer--];
+                PC = stack[--stackPointer];
+//                stackPointer--;
                 break;
                 // retorno de subrotina
             }
 
+            if(Y == 0xE) { // opc: 00E0
+                // clc
+                Log("clc");
+                for(int i = 0; i < 32; ++i) {
+                    for(int j = 0; j < 64; ++j) {
+                        video[i][j].active = false;
+                    }
+                }
+                break;
+            }
             break;
         }
 
@@ -158,6 +175,7 @@ void Cycle(pixel video[32][64]) {
         case 0x2000: { // opc: 2NNN -> jal NNN
             Log("subroutine call");
             stack[stackPointer++] = PC;
+//            stackPointer += 2;
             PC = NNN;
             // chamada de subrotina
             break;
@@ -210,52 +228,59 @@ void Cycle(pixel video[32][64]) {
                 case 0x1: { // opc 8XY1 -> OR Vx, Vy, Vx
                     Log("OR");
                     registers[X] |= registers[Y];
+                    registers[0xF] = 0;
                     break;
                 }
 
                 case 0x2: { // opc 8XY2 -> AND Vx, Vx, Vy
                     Log("and");
                     registers[X] &= registers[Y];
+                    registers[0xF] = 0;
                     break;
                 }
 
                 case 0x3: { // opc 8XY3 -> XOR Vx, Vx, Vy
                     Log("xor");
                     registers[X] ^= registers[Y];
+                    registers[0xF] = 0;
                     break;
                 }
 
                 case 0x4: { // opc 8XY4 -> add Vx, Vx, Vy
                     Log("add overflow");
-                    if(registers[X] + registers[Y] > 255) registers[0xF] = 1; // overflow
-                    else registers[0xF] = 0;
+                    uint8_t oldValue = registers[X];
                     registers[X] += registers[Y];
+                    if(oldValue + registers[Y] > 255) registers[0xF] = 1; // overflow
+                    else registers[0xF] = 0;
                     break;
                     // Soma com aviso de oferflow
                 }
 
                 case 0x5: { // opc 8XY5 -> sub Vx, Vx, Vy
                     Log("sub Vx, Vy");
-                    if(registers[X] > registers[Y]) registers[0xF] = 1;
-                    else registers[0xF] = 0;
+                    uint8_t oldValue = registers[X];
                     registers[X] -= registers[Y];
+                    if(oldValue < registers[Y]) registers[0xF] = 0;
+                    else registers[0xF] = 1;
                     break;
                 }
 
                 case 0x7: { // opc 8XY7 -> sub Vx, Vy, Vx
                     Log("sub Vy, Vx");
-                    if(registers[Y] > registers[X]) registers[0xF] = 1;
-                    else registers[0xF] = 0;
                     registers[X] = registers[Y] - registers[X];
+                    uint8_t oldValue = registers[X];
+                    if(registers[Y] > oldValue) registers[0xF] = 1;
+                    else registers[0xF] = 0;
                     break;
                 }
 
                 //Instrução ambigua!
                 case 0x6: { // opc 8XY6
                     Log("rshift");
-//                    registers[X] = registers[Y]; //Ambiguo!!!
-                    registers[0xF] = registers[X] & 0x01;
+                    registers[X] = registers[Y]; //Ambiguo!!!
+                    bool carriedOut = registers[X] & 0x01;
                     registers[X] = registers[X] >> 1;
+                    registers[0xF] = carriedOut;
 
                     break;
                 }
@@ -263,9 +288,10 @@ void Cycle(pixel video[32][64]) {
                 //Instrução ambigua!
                 case 0xE: { // opc 8XYE
                     Log("lsfhit");
-//                    registers[X] = registers[Y]; //Ambiguo!
-                    registers[0xF] = registers[X] & 0x80;
+                    registers[X] = registers[Y]; //Ambiguo!
+                    bool carriedOut = registers[X] & 0x80;
                     registers[X] = registers[X] << 1;
+                    registers[0xF] = carriedOut;
                     break;
                 }
 
@@ -313,9 +339,9 @@ void Cycle(pixel video[32][64]) {
 
             for(int i = 0; i < N; ++i) {
                 int pix = ram[indexRegister + i];
-                for(int j = 0; j < 8; ++j) {
+                for(int j = 7; j >= 0; --j) {
                     if((pix & (0x80 >> j)) != 0) {
-                        if(video[yCord + i][xCord + j].active == 1) {
+                        if(video[yCord + i][xCord + j].active == 1) { // colisao
                             registers[0xF] = 1;
                         }
                         video[yCord + i][xCord + j].active ^= 1;
@@ -329,11 +355,15 @@ void Cycle(pixel video[32][64]) {
         case 0xE000: {
             if (NN == 0x9E) { // opc EX9E
                 Log("skip if key");
+                if(registers[X] == keyPressed) PC += 2;
+                ClearKeys();
                 // salta instrução se tecla pressionada
             }
 
             if(NN == 0xA1) { // opc EXA1
                 Log("skip if not key");
+                if(registers[X] != keyPressed) PC += 2;
+                ClearKeys();
                 //salta instrução se tecla NAO pressionada
             }
 
@@ -370,6 +400,9 @@ void Cycle(pixel video[32][64]) {
 
                 case 0x0A: { // opc FX0A
                     Log("get key");
+                    if(keyPressed == -1) PC -= 2; // nada pressionado
+                    else registers[X] = keyPressed; // continua execução e coloca valor hex da tecla em Vx
+                    ClearKeys();
                     break;
                 }
 
@@ -391,11 +424,11 @@ void Cycle(pixel video[32][64]) {
                 // Ambigua!
                 case 0x55: { // opc FX55
                     Log("store");
-                    for(int i = 0; i <= registers[X]; ++i) {
+                    for(int i = 0; i <= X; ++i) {
                         ram[indexRegister + i] = registers[i];
                     }
 
-                    //indexRegister += registers[X] + 1;
+                    indexRegister += X + 1;
 
                     break;
                 }
@@ -404,11 +437,11 @@ void Cycle(pixel video[32][64]) {
                 // Ambigua!
                 case 0x65: { // opc FX65
                     Log("load");
-                    for(int i = 0; i <= registers[X]; ++i) {
+                    for(int i = 0; i <= X; ++i) {
                         registers[i] = ram[indexRegister + i];
                     }
 
-                    //indexRegister += registers[X] + 1;
+                    indexRegister += X + 1;
 
                     break;
                 }
