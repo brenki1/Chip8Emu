@@ -8,4 +8,4 @@ add_executable(uai main.c
         processing.c
         processing.h)
 
-target_link_libraries(uai "-lraylib -lgdi32 -lwinmm")
+target_link_libraries(uai "-lraylib -lGL -lm -lpthread -ldl -lrt -lX11")

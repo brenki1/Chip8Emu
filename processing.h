@@ -14,7 +14,8 @@ typedef struct {
 void StartProcessing(char*);
 void SetDelay(uint8_t i);
 uint8_t GetDelay();
-void DrawCall(const bool[][64]);
+
+//void DrawCall(const bool[][64]);
 
 
 #endif //UAI_PROCESSING_H

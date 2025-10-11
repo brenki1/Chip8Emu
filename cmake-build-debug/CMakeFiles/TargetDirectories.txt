@@ -1,3 +1,0 @@
-C:/Users/gusta/Desktop/uai/cmake-build-debug/CMakeFiles/uai.dir
-C:/Users/gusta/Desktop/uai/cmake-build-debug/CMakeFiles/edit_cache.dir
-C:/Users/gusta/Desktop/uai/cmake-build-debug/CMakeFiles/rebuild_cache.dir

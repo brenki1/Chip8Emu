@@ -10,6 +10,6 @@ void InitMemory();
 void DumpRam();
 void Cycle(pixel video[32][64]);
 void ReadKey(int key);
-void ClearKeys();
+void ClearKey(int key);
 
 #endif //CHIP8_CPU_H

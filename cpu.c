@@ -7,7 +7,7 @@
 
 #define null NULL
 #define PC_START 0x200
-#define debbuging 1
+#define debbuging 0
 
 
 unsigned char ram[4096];
@@ -20,7 +20,7 @@ uint16_t stackPointer;
 uint8_t soundTimer;
 uint8_t registers[16];
 bool keys[16];
-int keyPressed;
+bool drawFlag = false;
 
 
 const static uint8_t fonte[80] = {
@@ -44,14 +44,14 @@ const static uint8_t fonte[80] = {
 
 
 void ReadKey(int key) {
-    keyPressed = key;
+    //printf("Tecla detectada: %d\n", key);
     keys[key] = true;
 }
 
 
-void ClearKeys() {
-    keyPressed = -1;
-    memset(keys, 0, 16);
+void ClearKey(int key) {
+    //printf("Tecla limpa!\n");
+    keys[key] = false;
 }
 
 
@@ -66,14 +66,13 @@ void InitMemory() {
     soundTimer = 0;
     memset(registers, 0, 16);
     memset(keys, 0, 16);
-    keyPressed = -1;
 
     for(int i = 0; i < 80; ++i) {
         ram[i] = fonte[i];
     }
 
     //TODO: Remover!
-    //ram[0x1FF] = 1; // teste automatico
+    //ram[0x1FF] = 2; // teste automatico
 }
 
 void LoadRom(char *filePath) {
@@ -133,11 +132,11 @@ void Cycle(pixel video[32][64]) {
 
 //    printf("Ist separada: %02X%02X\n", i1, i2);
 
-    printf("Ist: %04X\n", inst);
-    printf("nib1: %X\n", nib1);
-    printf("nib2: %X\n", X);
-    printf("nib3: %X\n", Y);
-    printf("nib4: %X\n", N);
+    // printf("Ist: %04X\n", inst);
+    // printf("nib1: %X\n", nib1);
+    // printf("nib2: %X\n", X);
+    // printf("nib3: %X\n", Y);
+    // printf("nib4: %X\n", N);
 
     // Decode
 
@@ -348,6 +347,7 @@ void Cycle(pixel video[32][64]) {
                     }
                 }
             }
+            drawFlag = true;
             break;
         }
 
@@ -355,15 +355,13 @@ void Cycle(pixel video[32][64]) {
         case 0xE000: {
             if (NN == 0x9E) { // opc EX9E
                 Log("skip if key");
-                if(registers[X] == keyPressed) PC += 2;
-                ClearKeys();
+                if(keys[registers[X]] == 1) PC += 2;
                 // salta instrução se tecla pressionada
             }
 
             if(NN == 0xA1) { // opc EXA1
                 Log("skip if not key");
-                if(registers[X] != keyPressed) PC += 2;
-                ClearKeys();
+                if(keys[registers[X]] == 0) PC += 2;
                 //salta instrução se tecla NAO pressionada
             }
 
@@ -382,6 +380,7 @@ void Cycle(pixel video[32][64]) {
                 case 0x15: { // opc FX15
                     Log("delay timer = Vx");
                     //delayTimer = registers[X];
+                    //printf("set delay: %d\n", registers[X]);
                     SetDelay(registers[X]);
                     break;
                 }
@@ -400,9 +399,14 @@ void Cycle(pixel video[32][64]) {
 
                 case 0x0A: { // opc FX0A
                     Log("get key");
-                    if(keyPressed == -1) PC -= 2; // nada pressionado
-                    else registers[X] = keyPressed; // continua execução e coloca valor hex da tecla em Vx
-                    ClearKeys();
+                    int anyKey = 0;
+                    for(int i = 0; i < 16; ++i) {
+                        if(keys[i]) {
+                            registers[X] = keys[i];
+                            anyKey = 1;
+                        }
+                    }
+                    if(!anyKey) PC -= 2;
                     break;
                 }
 
@@ -457,6 +461,5 @@ void Cycle(pixel video[32][64]) {
         default: {
             printf("Invalid opcode!\n");
         }
-
     }
 }
